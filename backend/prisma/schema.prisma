@@ -1,0 +1,413 @@
+// LearnMate AI - Database Schema with pgvector
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pgvector(map: "vector")]
+}
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+enum Role {
+  STUDENT
+  TEACHER
+  ADMIN
+}
+
+enum ProcessingStatus {
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum ExplanationModeEnum {
+  SIMPLE
+  DETAILED
+  EXAM_FOCUSED
+  BEGINNER_FRIENDLY
+  EXAMPLE_BASED
+}
+
+enum QuestionTypeEnum {
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+  SHORT_ANSWER
+  SCENARIO_BASED
+}
+
+enum DifficultyEnum {
+  EASY
+  MEDIUM
+  HARD
+}
+
+model User {
+  id             String    @id @default(uuid())
+  email          String    @unique
+  passwordHash   String
+  name           String
+  role           Role      @default(STUDENT)
+  avatarUrl      String?
+  streakCount    Int       @default(0)
+  lastActiveDate DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  subjects        Subject[]
+  materials       Material[]
+  conversations   Conversation[]
+  quizzes         Quiz[]
+  quizAttempts    QuizAttempt[]
+  flashcards      Flashcard[]
+  flashcardReviews FlashcardReview[]
+  studyPlans      StudyPlan[]
+  learningSessions LearningSession[]
+  topicProgresses TopicProgress[]
+  preference      UserPreference?
+  aiRequests      AIRequest[]
+  aiActions       AIAction[]
+  auditLogs       AuditLog[]
+
+  @@map("users")
+}
+
+model UserPreference {
+  id                      String              @id @default(uuid())
+  userId                  String              @unique
+  preferredExplanationMode ExplanationModeEnum @default(SIMPLE)
+  voiceTutorSpeed         Float               @default(1.0)
+  voiceId                 String              @default("alloy")
+  dailyGoalMinutes        Int                 @default(30)
+  notificationsEnabled    Boolean             @default(true)
+  updatedAt               DateTime            @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
+}
+
+model Subject {
+  id          String   @id @default(uuid())
+  userId      String
+  name        String
+  code        String?
+  description String?
+  color       String   @default("#6366F1")
+  icon        String   @default("book")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  materials        Material[]
+  conversations    Conversation[]
+  topics           Topic[]
+  quizzes          Quiz[]
+  flashcards       Flashcard[]
+  studyPlans       StudyPlan[]
+  learningSessions LearningSession[]
+  topicProgresses  TopicProgress[]
+
+  @@map("subjects")
+}
+
+model Material {
+  id           String           @id @default(uuid())
+  userId       String
+  subjectId    String?
+  title        String
+  fileName     String
+  fileType     String
+  fileUrl      String
+  fileSize     Int
+  status       ProcessingStatus @default(PROCESSING)
+  pageCount    Int              @default(1)
+  chunkCount   Int              @default(0)
+  errorMessage String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject    Subject?        @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  chunks     MaterialChunk[]
+  quizzes    Quiz[]
+  flashcards Flashcard[]
+
+  @@map("materials")
+}
+
+model MaterialChunk {
+  id           String                      @id @default(uuid())
+  materialId   String
+  chunkIndex   Int
+  pageNumber   Int                         @default(1)
+  sectionTitle String?
+  content      String
+  tokenCount   Int                         @default(0)
+  embedding    Unsupported("vector(1536)")?
+  metadata     Json?
+  createdAt    DateTime                    @default(now())
+
+  material Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+
+  @@index([materialId])
+  @@map("material_chunks")
+}
+
+model Topic {
+  id          String   @id @default(uuid())
+  subjectId   String
+  name        String
+  description String?
+  orderIndex  Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@map("topics")
+}
+
+model Conversation {
+  id        String   @id @default(uuid())
+  userId    String
+  subjectId String?
+  title     String   @default("Study Conversation")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject  Subject?  @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  messages Message[]
+
+  @@map("conversations")
+}
+
+model Message {
+  id             String   @id @default(uuid())
+  conversationId String
+  role           String   // user, assistant, system
+  content        String
+  audioUrl       String?
+  mode           String?  // simple, detailed, exam-focused, etc.
+  citations      Json?    // array of citation references
+  toolCalls      Json?    // list of tool executions
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@map("messages")
+}
+
+model Quiz {
+  id               String         @id @default(uuid())
+  userId           String
+  subjectId        String?
+  materialId       String?
+  title            String
+  difficulty       DifficultyEnum @default(MEDIUM)
+  topic            String?
+  timeLimitSeconds Int            @default(600)
+  createdAt        DateTime       @default(now())
+
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject   Subject?       @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  material  Material?      @relation(fields: [materialId], references: [id], onDelete: SetNull)
+  questions QuizQuestion[]
+  attempts  QuizAttempt[]
+
+  @@map("quizzes")
+}
+
+model QuizQuestion {
+  id             String           @id @default(uuid())
+  quizId         String
+  question       String
+  type           QuestionTypeEnum @default(MULTIPLE_CHOICE)
+  options        Json             // string array of 4 choices for MCQ
+  correctAnswer  String
+  explanation    String
+  difficulty     DifficultyEnum   @default(MEDIUM)
+  sourceChunkId  String?
+  createdAt      DateTime         @default(now())
+
+  quiz Quiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+  @@map("quiz_questions")
+}
+
+model QuizAttempt {
+  id               String   @id @default(uuid())
+  quizId           String
+  userId           String
+  score            Float
+  totalQuestions   Int
+  correctCount     Int
+  timeSpentSeconds Int      @default(0)
+  answers          Json     // Array of student answers and correctness
+  weakTopics       Json?    // Identified weak concepts from mistakes
+  createdAt        DateTime @default(now())
+
+  quiz Quiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("quiz_attempts")
+}
+
+model Flashcard {
+  id             String         @id @default(uuid())
+  userId         String
+  subjectId      String?
+  materialId     String?
+  topic          String?
+  front          String
+  back           String
+  difficulty     DifficultyEnum @default(MEDIUM)
+  repetition     Int            @default(0)
+  interval       Int            @default(1) // in days
+  easeFactor     Float          @default(2.5) // SM-2 ease factor
+  isFavorite     Boolean        @default(false)
+  nextReviewDate DateTime       @default(now())
+  lastReviewedAt DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  user     User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject  Subject?          @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  material Material?         @relation(fields: [materialId], references: [id], onDelete: SetNull)
+  reviews  FlashcardReview[]
+
+  @@map("flashcards")
+}
+
+model FlashcardReview {
+  id             String   @id @default(uuid())
+  flashcardId    String
+  userId         String
+  quality        Int      // 0-5 rating in SM-2
+  responseTimeMs Int      @default(0)
+  isKnown        Boolean  @default(true)
+  reviewedAt     DateTime @default(now())
+
+  flashcard Flashcard @relation(fields: [flashcardId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("flashcard_reviews")
+}
+
+model StudyPlan {
+  id                  String    @id @default(uuid())
+  userId              String
+  subjectId           String?
+  title               String
+  targetSubject       String
+  examDate            DateTime?
+  availableHoursPerDay Float     @default(2.0)
+  currentLevel        String    @default("Beginner")
+  weakTopics          Json?
+  status              String    @default("ACTIVE") // ACTIVE, COMPLETED, ARCHIVED
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject  Subject?        @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  items    StudyPlanItem[]
+
+  @@map("study_plans")
+}
+
+model StudyPlanItem {
+  id               String    @id @default(uuid())
+  studyPlanId      String
+  dayNumber        Int
+  scheduledDate    DateTime
+  topic            String
+  description      String
+  estimatedMinutes Int       @default(45)
+  isCompleted      Boolean   @default(false)
+  completedAt      DateTime?
+  orderIndex       Int       @default(0)
+
+  studyPlan StudyPlan @relation(fields: [studyPlanId], references: [id], onDelete: Cascade)
+
+  @@map("study_plan_items")
+}
+
+model LearningSession {
+  id              String   @id @default(uuid())
+  userId          String
+  subjectId       String?
+  sessionType     String   // CHAT, QUIZ, FLASHCARD, VOICE
+  durationMinutes Int      @default(0)
+  topicsCovered   Json?
+  score           Float?
+  createdAt       DateTime @default(now())
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject Subject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+
+  @@map("learning_sessions")
+}
+
+model TopicProgress {
+  id                      String   @id @default(uuid())
+  userId                  String
+  subjectId               String?
+  topicName               String
+  masteryScore            Float    @default(0.0) // 0 - 100%
+  totalQuestionsAnswered  Int      @default(0)
+  correctAnswersCount     Int      @default(0)
+  lastStudiedAt           DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject Subject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, topicName])
+  @@map("topic_progresses")
+}
+
+model AIRequest {
+  id               String   @id @default(uuid())
+  userId           String
+  prompt           String
+  response         String
+  modelUsed        String
+  tokensPrompt     Int      @default(0)
+  tokensCompletion Int      @default(0)
+  latencyMs        Int      @default(0)
+  createdAt        DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("ai_requests")
+}
+
+model AIAction {
+  id            String   @id @default(uuid())
+  userId        String
+  actionType    String
+  toolName      String
+  inputPayload  Json?
+  outputPayload Json?
+  status        String   @default("SUCCESS")
+  createdAt     DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("ai_actions")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  action    String
+  ipAddress String?
+  userAgent String?
+  details   Json?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("audit_logs")
+}
