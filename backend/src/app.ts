@@ -12,6 +12,7 @@ import { sendSuccess } from './utils/response';
 import { authRoutes } from './modules/auth/auth.routes';
 import { userRoutes } from './modules/users/user.routes';
 import { materialRoutes } from './modules/materials/material.routes';
+import { conversationRoutes } from './modules/conversations/conversation.routes';
 
 export const createApp = (): Application => {
   const app = express();
@@ -73,6 +74,7 @@ export const createApp = (): Application => {
   app.use('/api/v1/auth', authRoutes);
   app.use('/api/v1/users', userRoutes);
   app.use('/api/v1/materials', materialRoutes);
+  app.use('/api/v1/conversations', conversationRoutes);
 
   // Global Error Handler
   app.use(errorHandler);
