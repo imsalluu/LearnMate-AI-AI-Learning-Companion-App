@@ -16,6 +16,7 @@ import { conversationRoutes } from './modules/conversations/conversation.routes'
 import { tutorRoutes } from './modules/tutor/tutor.routes';
 import { quizRoutes } from './modules/quizzes/quiz.routes';
 import { flashcardRoutes } from './modules/flashcards/flashcard.routes';
+import { studyPlanRoutes } from './modules/study-plans/study-plan.routes';
 
 export const createApp = (): Application => {
   const app = express();
@@ -81,6 +82,7 @@ export const createApp = (): Application => {
   app.use('/api/v1/tutor', tutorRoutes);
   app.use('/api/v1/quizzes', quizRoutes);
   app.use('/api/v1/flashcards', flashcardRoutes);
+  app.use('/api/v1/study-plans', studyPlanRoutes);
 
   // Global Error Handler
   app.use(errorHandler);
