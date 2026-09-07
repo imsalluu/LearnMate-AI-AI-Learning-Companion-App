@@ -9,6 +9,8 @@ import path from 'path';
 import { env } from './config/env';
 import { errorHandler } from './middlewares/errorHandler.middleware';
 import { sendSuccess } from './utils/response';
+import { authRoutes } from './modules/auth/auth.routes';
+import { userRoutes } from './modules/users/user.routes';
 
 export const createApp = (): Application => {
   const app = express();
@@ -65,6 +67,13 @@ export const createApp = (): Application => {
       status: 'online',
     });
   });
+
+  // Domain API Routes
+  app.use('/api/v1/auth', authRoutes);
+  app.use('/api/v1/users', userRoutes);
+
+  // Global Error Handler
+  app.use(errorHandler);
 
   return app;
 };
